@@ -4,13 +4,16 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -36,7 +39,20 @@ jobs:
       - name: APK bouwen
         run: flutter build apk --release
 
+      - name: APK hernoemen
+        run: cp build/app/outputs/flutter-apk/app-release.apk printer-finder.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: printer-finder-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: printer-finder.apk
+
+      - name: Publiceren als release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Printer Finder v1.0.${{ github.run_number }}
+          body: Download printer-finder.apk en installeer hem op je Android-telefoon.
+          files: printer-finder.apk
+          make_latest: true
