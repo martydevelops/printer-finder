@@ -25,7 +25,9 @@ jobs:
 
       # Genereert de android/-map; bestaande lib/ en pubspec.yaml blijven staan.
       - name: Android-platform aanmaken
-        run: flutter create . --platforms android --project-name printer_finder --org nl.printerfinder
+        run: |
+          flutter create . --platforms android --project-name printer_finder --org nl.printerfinder
+          rm -f test/widget_test.dart
 
       - name: Rechten toevoegen aan AndroidManifest
         run: |
