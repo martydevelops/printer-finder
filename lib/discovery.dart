@@ -128,9 +128,9 @@ class PrinterDiscovery {
     }
   }
 
-  Future<bool> _portOpen(String ip, int port) async {
+  Future<bool> _portOpen(String ip, int port, {int ms = 450}) async {
     try {
-      final s = await Socket.connect(ip, port, timeout: const Duration(milliseconds: 450));
+      final s = await Socket.connect(ip, port, timeout: Duration(milliseconds: ms));
       s.destroy();
       return true;
     } catch (_) {
@@ -153,6 +153,97 @@ class PrinterDiscovery {
     } finally {
       client.close(force: true);
     }
+  }
+
+  // ---------- 3. Handmatig toevoegen (IP of hostnaam) ----------
+
+  static const _manualPorts = <int, String>{
+    9100: 'RAW (9100)',
+    631: 'IPP',
+    515: 'LPD',
+    80: 'HTTP',
+  };
+
+  /// Voegt een printer toe op basis van een IP-adres of hostnaam, bv.
+  /// "192.168.1.25", "HP6500A.local", "printer.thuis" of "http://192.168.1.25/".
+  /// Gooit een [ManualAddException] met een Nederlandse foutmelding als het mislukt.
+  Future<DiscoveredPrinter> addManual(String input, {bool silent = false}) async {
+    final entry = normalizeEntry(input);
+    if (entry.isEmpty) throw ManualAddException('Vul een IP-adres of hostnaam in.');
+
+    final ip = await _resolve(entry);
+    if (ip == null) {
+      if (silent) return _offlineManual(entry);
+      throw ManualAddException('Kan "$entry" niet vinden op het netwerk. Controleer de naam, of gebruik het IP-adres.');
+    }
+
+    final open = <String>[];
+    await Future.wait(_manualPorts.entries.map((e) async {
+      if (await _portOpen(ip, e.key, ms: 1500)) open.add(e.value);
+    }));
+    if (open.isEmpty) {
+      if (silent) return _offlineManual(entry, ip: ip);
+      throw ManualAddException('Apparaat $ip reageert niet. Staat de printer aan en zit hij op hetzelfde netwerk?');
+    }
+
+    final p = _get(ip)
+      ..manualEntry = entry
+      ..online = true
+      ..sources.add('Handmatig');
+    p.protocols.addAll(open.where((x) => x != 'HTTP'));
+    if (!_isIp(entry)) p.host ??= entry;
+    if (p.model == null && open.contains('HTTP')) p.model = await _fetchModelFromWeb(ip);
+    _emit();
+    return p;
+  }
+
+  DiscoveredPrinter _offlineManual(String entry, {String? ip}) {
+    final key = ip ?? entry;
+    final p = _get(key)
+      ..manualEntry = entry
+      ..online = false
+      ..sources.add('Handmatig');
+    _emit();
+    return p;
+  }
+
+  void removeManual(DiscoveredPrinter p) {
+    _printers.remove(p.ip);
+    _emit();
+  }
+
+  static String normalizeEntry(String input) {
+    var s = input.trim();
+    s = s.replaceFirst(RegExp(r'^[a-z]+://', caseSensitive: false), ''); // http://, ipp://
+    s = s.split('/').first; // pad weghalen
+    s = s.replaceFirst(RegExp(r':\d+$'), ''); // poort weghalen
+    return s.toLowerCase();
+  }
+
+  static bool _isIp(String s) => InternetAddress.tryParse(s) != null;
+
+  Future<String?> _resolve(String entry) async {
+    if (_isIp(entry)) return entry;
+
+    // Al via Bonjour gevonden met deze naam? (bv. "HP6500A.local")
+    final bare = entry.replaceAll(RegExp(r'\.$'), '');
+    for (final p in _printers.values) {
+      final h = p.host?.toLowerCase().replaceAll(RegExp(r'\.$'), '');
+      if (h != null && (h == bare || h.split('.').first == bare.split('.').first) && _isIp(p.ip)) {
+        return p.ip;
+      }
+    }
+
+    // Gewone DNS-lookup (werkt ook voor .local op de meeste recente telefoons).
+    final candidates = [entry, if (!entry.contains('.')) '$entry.local'];
+    for (final c in candidates) {
+      try {
+        final r = await InternetAddress.lookup(c, type: InternetAddressType.IPv4)
+            .timeout(const Duration(seconds: 4));
+        if (r.isNotEmpty) return r.first.address;
+      } catch (_) {}
+    }
+    return null;
   }
 
   // ---------- Testpagina ----------
@@ -197,4 +288,11 @@ class PrinterDiscovery {
     await stop();
     await _controller.close();
   }
+}
+
+class ManualAddException implements Exception {
+  ManualAddException(this.message);
+  final String message;
+  @override
+  String toString() => message;
 }

@@ -10,7 +10,17 @@ class DiscoveredPrinter {
   String? adminUrl; // uit TXT-record "adminurl"
   String? location; // uit TXT-record "note"
   final Set<String> protocols = {}; // IPP, IPPS, RAW 9100, LPD, ...
-  final Set<String> sources = {}; // "Bonjour" en/of "Netwerkscan"
+  final Set<String> sources = {}; // "Bonjour", "Netwerkscan" en/of "Handmatig"
+  String? manualEntry; // wat de gebruiker invoerde (IP of hostnaam), als handmatig toegevoegd
+  bool online = true;
+
+  bool get isManual => manualEntry != null;
+
+  /// Tweede regel op de kaart: "hostnaam · ip" of alleen het ip.
+  String get subtitle {
+    final h = (manualEntry ?? host)?.replaceAll(RegExp(r'\.$'), '');
+    return h != null && h != ip ? '$h · $ip' : ip;
+  }
 
   String get displayName => model ?? name ?? 'Printer op $ip';
 
