@@ -1,0 +1,22 @@
+name: printer_finder
+description: Detecteert automatisch netwerkprinters (bv. HP OfficeJet 6500A) via Bonjour/mDNS en een subnetscan.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  nsd: ^4.0.0
+  network_info_plus: ^6.0.0
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
